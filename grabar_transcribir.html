@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Grabar y Transcribir</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Arial,sans-serif;background:#f4f6f9;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;}
+.card{background:#fff;border-radius:14px;padding:32px;width:100%;max-width:560px;box-shadow:0 2px 16px rgba(0,0,0,0.08);}
+h1{font-size:1.2rem;color:#1a1d2a;margin-bottom:4px;}
+.sub{font-size:0.8rem;color:#6b7080;margin-bottom:24px;}
+.btn-row{display:flex;gap:10px;margin-bottom:18px;}
+.btn{flex:1;padding:14px;border:none;border-radius:10px;font-size:0.95rem;font-weight:600;cursor:pointer;transition:opacity 0.15s;}
+.btn:disabled{opacity:0.4;cursor:not-allowed;}
+.btn-rec{background:#ef4444;color:#fff;}
+.btn-stop{background:#374151;color:#fff;}
+.btn-clear{background:#e5e7eb;color:#374151;}
+.status{display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:0.82rem;color:#6b7080;}
+.dot{width:10px;height:10px;border-radius:50%;background:#d1d5db;}
+.dot.live{background:#ef4444;animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+textarea{width:100%;min-height:220px;padding:14px;border:1px solid #d1d5db;border-radius:10px;font-size:0.95rem;line-height:1.6;resize:vertical;outline:none;font-family:Arial,sans-serif;}
+textarea:focus{border-color:#4f8ef7;}
+.copy-btn{margin-top:12px;width:100%;padding:11px;background:#4f8ef7;color:#fff;border:none;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;}
+.copy-btn:hover{opacity:0.88;}
+.hint{font-size:0.7rem;color:#9ca3af;margin-top:10px;text-align:center;}
+.lang-select{margin-bottom:14px;}
+.lang-select select{padding:7px 10px;border-radius:6px;border:1px solid #d1d5db;font-size:0.8rem;}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🎙️ Grabar y Transcribir</h1>
+  <p class="sub">Graba tu nota de voz y se transcribe automáticamente a texto.</p>
+
+  <div class="lang-select">
+    <label style="font-size:0.78rem;color:#374151;font-weight:600;">Idioma: </label>
+    <select id="lang">
+      <option value="es-ES" selected>Español</option>
+      <option value="en-US">English</option>
+    </select>
+  </div>
+
+  <div class="status">
+    <div class="dot" id="dot"></div>
+    <span id="status-text">Listo para grabar</span>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-rec" id="btn-rec" onclick="startRec()">🎤 Grabar</button>
+    <button class="btn btn-stop" id="btn-stop" onclick="stopRec()" disabled>⏹ Detener</button>
+    <button class="btn btn-clear" onclick="clearText()">🗑 Limpiar</button>
+  </div>
+
+  <textarea id="output" placeholder="Aquí aparecerá el texto transcrito..."></textarea>
+
+  <button class="copy-btn" onclick="copyText()">📋 Copiar texto</button>
+
+  <p class="hint">
+    Para que Chrome no pida permiso cada vez:<br>
+    click en 🔒 de la URL → Micrófono → Permitir siempre
+  </p>
+</div>
+
+<script>
+let recognition = null;
+let isRecording = false;
+let finalText = '';
+
+// Pedir micrófono al cargar para que Chrome lo recuerde
+navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {});
+
+function initRecognition(){
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognition){
+    alert('Tu navegador no soporta reconocimiento de voz. Usa Google Chrome.');
+    return null;
+  }
+  const rec = new SpeechRecognition();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.lang = document.getElementById('lang').value;
+
+  rec.onresult = (event) => {
+    let interim = '';
+    for(let i = event.resultIndex; i < event.results.length; i++){
+      const t = event.results[i][0].transcript;
+      if(event.results[i].isFinal) finalText += t + ' ';
+      else interim += t;
+    }
+    document.getElementById('output').value = finalText + interim;
+  };
+
+  rec.onerror = (event) => {
+    if(event.error === 'not-allowed'){
+      alert('Permiso denegado. Click en 🔒 de la URL → Micrófono → Permitir siempre.');
+      stopRec();
+    }
+  };
+
+  rec.onend = () => {
+    if(isRecording) rec.start();
+  };
+
+  return rec;
+}
+
+function startRec(){
+  finalText = document.getElementById('output').value;
+  if(finalText && !finalText.endsWith(' ')) finalText += ' ';
+  recognition = initRecognition();
+  if(!recognition) return;
+  isRecording = true;
+  recognition.start();
+  document.getElementById('btn-rec').disabled  = true;
+  document.getElementById('btn-stop').disabled = false;
+  document.getElementById('dot').classList.add('live');
+  document.getElementById('status-text').textContent = 'Grabando...';
+}
+
+function stopRec(){
+  isRecording = false;
+  if(recognition) recognition.stop();
+  document.getElementById('btn-rec').disabled  = false;
+  document.getElementById('btn-stop').disabled = true;
+  document.getElementById('dot').classList.remove('live');
+  document.getElementById('status-text').textContent = 'Listo para grabar';
+}
+
+function clearText(){
+  document.getElementById('output').value = '';
+  finalText = '';
+}
+
+function copyText(){
+  const text = document.getElementById('output').value.trim();
+  if(!text){ alert('No hay texto para copiar'); return; }
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    const orig = btn.textContent;
+    btn.textContent = '✅ Copiado';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+</script>
+</body>
+</html>
